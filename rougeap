@@ -1,0 +1,313 @@
+#!/bin/python
+
+# TODO:
+# redo with less shell
+# - add more functions
+# - replace % with format() where possible
+# - macchanger!!!
+
+import io
+import os
+import sys
+import time
+import getopt
+import subprocess
+
+# path to user configs
+path = '%s/.config' % os.path.expanduser('~')
+
+# log files
+dlog = 'dnsmasq.log'
+hlog = 'hostapd.log'
+
+# default access point vars - redo with python regex
+apdev = subprocess.Popen("cat %s/hostapd/rouge.conf | grep interface= | cut -d'=' -f2" % path,
+		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+apsubnet = '10.0.0.0'
+apnetmask = '255.255.255.0'
+apip = '10.0.0.1/24'
+
+# ap settings - redo with python regex
+ssid = subprocess.Popen("cat %s/hostapd/rouge.conf | grep ssid= | cut -d'=' -f2" % path,
+		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+chan = subprocess.Popen("cat %s/hostapd/rouge.conf | grep channel= | cut -d'=' -f2" % path,
+		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+enc = subprocess.Popen("cat %s/hostapd/rouge.conf | grep auth_algs= | cut -d'=' -f2" % path,
+		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+password = subprocess.Popen("cat %s/hostapd/rouge.conf | grep channel= | cut -d'=' -f2" % path,
+		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+
+# default internet device vars
+codev = 'wlp3s0'
+coip = subprocess.Popen("ip a | grep %s | awk 'FNR==2 {print $2}'" % codev, shell=True,
+		stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+
+# all detected devices
+devices = subprocess.Popen("ip a | grep \^\[0-9\] | awk '{print $2}' | cut -d':' -f1", shell=True,
+		stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip().split()
+
+
+
+def menu():
+	while True:
+		try:
+			print('[Menu splash here]')
+			print('0 - Exit')
+			print('1 - AP setup')
+			print('2 - IP setup')
+			print('3 - Start AP')
+			selection = int(input('> '))
+
+			if selection == 0:
+				sys.exit(0)
+
+			elif selection == 1:
+				varsetup()
+				break
+
+			elif selection == 2:
+				print('Coming soon')
+				break
+
+			elif selection == 3:
+				apstart()
+				break
+
+			else:
+				os.system('clear')
+				print('Number out of range.')
+
+		except ValueError:
+			os.system('clear')
+			print('Invalid input.')
+
+		except KeyboardInterrupt:
+			print('\nExiting...')
+			sys.exit(0)
+
+		except Exception as e:
+			print('\nError: {}'.format(e))
+			print('Exiting...')
+			sys.exit(1)
+
+
+
+def varsetup():
+	try:
+		# globals
+		global apdev
+		global ssid
+		global chan
+		global enc
+		global password
+
+		# set device to be used as ap
+		defap = apdev
+
+		while True:
+			os.system('clear')
+			print('Detected devices:')
+			i = 0
+
+			for d in devices:
+				print('{} - {}'.format(i, d))
+				i += 1
+
+			apselect = input('# of dev to be used as AP [{}]: '.format(defap))
+
+			if apselect and int(apselect) in range(i):
+				apdev = devices[int(apselect)]
+				print('AP dev is now {}.'.format(apdev))
+				break
+
+			elif apselect and int(apselect) not in range(i):
+				print('Not a valid selection.')
+
+			elif not apselect:
+				print('AP dev remains {}.'.format(defap))
+				break
+
+		# set ssid
+		defssid = ssid
+		while True:
+			os.system('clear')
+			ssidselect = input('Enter SSID [{}]: '.format(defssid))
+
+			if ssidselect:
+				ssid = ssidselect
+				confirm = input('New SSID is {}. Is this correct? [y/N]: '.format(ssid)).lower()
+
+				if confirm == 'y':
+					break
+
+			elif not ssidselect:
+				print('SSID remains {}.'.format(defssid))
+				break
+
+		# set channel
+		defchan = chan
+		while True:
+			os.system('clear')
+			chanselect = input('Select a channel [{}]: '.format(defchan))
+
+			if chanselect in range(1, 12):
+				chan = chanselect
+				confirm = input('New channel is {}. Is this correct? [y/N]: '.format(channel)).lower()
+
+				if confirm == 'y':
+					break
+
+				else:
+					continue
+
+			elif not chanselect:
+				print('Channel remains {}.'.format(defchan))
+				break
+		
+		# set encryption
+		defenc = enc
+		modes = ('open', 'wpa2', 'wep')
+
+		while True:
+			os.system('clear')
+			print('Encryption modes:')
+			print('0 - open')
+			print('1 - wpa2')
+			print('2 - wep')
+			encselect = input('Select encryption type [{}]: '.format(defenc))
+
+			if encselect in range(3):
+				enc = encselect
+				confirm = input('New channel is {}. Is this correct? [y/N]: '.format(channel)).lower()
+
+				if confirm == 'y':
+					break
+
+			elif not encselect:
+				print('Encrytption mode remains {}.'.format(modes[int(enc)]))
+				break
+
+		# final confirm and commit
+		os.system('clear')
+		print('--Final settings--')
+		print('AP interface:		{}'.format(apdev))	# tab alignment???
+		print('SSID:			{}'.format(ssid))
+		print('Channel:		{}'.format(chan))
+		print('Encryption mode:	{}'.format(modes[int(enc)]))
+		print('Commiting...')
+		commit()
+		
+	except KeyboardInterrupt:
+		print('\nExiting...')
+		sys.exit(0)
+
+	except Exception as e:
+		print('\nError: {}'.format(e))
+		print('Exiting...')
+		sys.exit(1)
+
+
+
+def commit():
+	# make file changes here
+	thing = '{}/hostapd/rouge.conf'.format(path)
+	apconf = open('{}'.format(thing), 'rb')
+	print(apconf.read())
+	apconf.close()
+	pass
+
+
+
+def apstart():
+	try:
+		# Configure iface
+		subprocess.run('ip link set %s down' % apdev, shell=True, check=True)
+		subprocess.run('ip addr flush dev %s' % apdev, shell=True, check=True)
+		subprocess.run('ip link set %s up' % apdev, shell=True, check=True)
+		subprocess.run('ip addr add %s dev %s' % (apip, apdev), shell=True, check=True)
+
+		# Set up NAT
+		subprocess.run('iptreset', shell=True, check=True)
+		subprocess.run('iptables -t nat -A POSTROUTING -o %s -j MASQUERADE' % codev, shell=True, check=True)
+		subprocess.run('iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT', shell=True, check=True)
+		subprocess.run('iptables -A FORWARD -i %s -o %s -j ACCEPT' % (apdev, codev), shell=True, check=True)
+		subprocess.run('sysctl -w net.ipv4.ip_forward=1', shell=True, check=True)
+
+		# Stop dnsmasq if started
+		dnsmasq = subprocess.Popen('ps -e | grep dnsmasq', shell=True, stdout=subprocess.PIPE,
+					universal_newlines=True).communicate()[0].strip()
+
+		if dnsmasq:
+			print('dnsmasq already running. Kill it? [y/N]')
+			killit = input('> ').lower()
+		
+			if killit != 'y':
+				sys.exit('Exiting program')
+
+			subprocess.run('killall dnsmasq', shell=True)
+
+		# Start dsnmasq and hostapd
+#		dwriter = io.open(dlog, 'wb') 
+#		dreader = io.open(dlog, 'rb', 1)
+#		hwriter = io.open(hlog, 'wb') 
+#		hreader = io.open(hlog, 'rb', 1)
+
+		with io.open(dlog, 'wb') as dwriter, io.open(hlog, 'wb') as hwriter,\
+			io.open(dlog, 'rb', 1) as dreader, io.open(hlog, 'rb', 1) as hreader:
+			dnsmasq = subprocess.Popen('dnsmasq -d -C %s/dnsmasq/rouge.conf' % path, shell=True,
+						stdout=dwriter, universal_newlines=True)
+			hostapd = subprocess.Popen('hostapd %s/hostapd/rouge.conf' % path, shell=True,
+						stdout=hwriter, universal_newlines=True)
+
+			while dnsmasq.poll() is None and hostapd.poll() is None:
+				dout = dreader.read().decode()
+				hout = hreader.read().decode().strip()
+
+				if dout:
+					print(dout)
+
+				if hout:
+					print(hout)
+
+#		while True:
+#			if hreader.read().decode():
+#				print('From hostapd: ' + hreader.read().decode())
+#				#sys.stdout.write('From hostapd: ' + hreader.read().decode())
+#			if dreader.read().decode():
+#				print('dnsmasq')
+#				print('From dnsmasq: ' + dreader.read().decode())
+#				#sys.stdout.write('From dnsmasq: ' + dreader.read().decode())
+			
+	except KeyboardInterrupt:
+		code = 0
+		pass
+
+	except Exception as error:
+		code = 1
+		print('Error: {}.'.format(error))
+
+	# Tear everything down
+	print('Stopping hostapd...')
+	hostapd.terminate()
+	print('Stopping dnsmask...')
+	dnsmasq.terminate()
+	print('Stopping ip forwarding...')
+	subprocess.run('sysctl -w net.ipv4.ip_forward=0', shell=True, check=True)
+	print('Resetting iptables...')
+	subprocess.run('iptreset', shell=True, check=True)
+	print('Removing log files...')
+	os.remove(hlog)
+	os.remove(dlog)
+	sys.exit(code)
+
+
+
+if __name__ == '__main__':
+	os.system('clear')
+	if os.getuid() != 0:
+		print('This script needs root.')
+		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
+
+	menu()
+#	varsetup()
+#	apsetup()

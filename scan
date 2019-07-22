@@ -1,0 +1,37 @@
+#!/bin/python
+
+import argparse
+from scapy.all import *
+
+def getargs():
+	parser = argparse.ArguementParser()
+	parser.add_argument('-t', '--target', dest='target', help='Target IP [range]')
+	options = parser.parse_args()
+	return options
+
+def scan(ip):
+	arpreq = ARP(pdst=ip)
+	bcast = Ether(dst='ff:ff:ff:ff:ff:ff')
+	arpreqbcast = bcast/arpreq
+	anslist = srp(arpreqbcast, timeout=1, verbose=False)[0]
+	clilist = []
+	print(anslist[1])
+	for elem in anslist:
+		clidict = {'ip': elem[1].psrc, 'mac': elem[1].hwsrc}
+		clilist.append(clidict)
+	return clilist
+
+def printres(reslist):
+	print('HOST (IP)\t\tMAC')
+	print("----------------------------------------------------")
+	for client in reslist:
+		print('{}\t\t{}'.format(client['ip'], client['mac']))
+
+if __name__ == '__main__':
+	# get root
+	if os.getuid() != 0:
+		print('This script needs root.')
+		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
+
+	scanres = scan('192.168.1.0/24')
+	printres(scanres)

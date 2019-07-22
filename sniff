@@ -1,0 +1,42 @@
+#!/bin/env python
+
+#TODO
+# - give option to write unique ips, unique communitcations, or overy interaction to file
+# - filter by ip
+# - pro filters
+
+import os
+import re
+import sys
+import socket
+from scapy.all import *
+
+# sniff websites
+def dnssniff(packet):
+	if (DNS in packet) and (packet[DNS].qr == 1):
+		print('[*] {} -> {}'.format(packet[IP].dst, packet[DNS].qd.qname.decode()))
+
+def ipfilter(ip):
+	splitip = ip.split('.')
+
+	if len(splitip) == 4:
+		for octet in ip.split('.'):
+			if int(octet) < 0 or int(octet) > 255:
+				print('Invalid IP.')
+				sys.exit(1)
+		
+		return 'host {}'.format(ip)
+
+if __name__ == '__main__':
+	# get root
+	if os.getuid() != 0:
+		print('This script needs root.')
+		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
+
+	bpf = ''
+	if len(sys.argv) > 1:
+		bpf = ipfilter(sys.argv[1])
+
+	# fire up sniffer
+	sniff(prn=dnssniff, filter=bpf, store=False)
+
