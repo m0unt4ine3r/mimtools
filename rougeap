@@ -1,10 +1,26 @@
-#!/bin/python
+#!/usr/bin/env python
+
+# RougeAP - Software for a poor man's wifi pineapple
+# By Anthony Roebuck III
+
+# Requires:
+# - hostapd
+# - dnsmasq
+# - 2 network interefaces - one to connect to the internet and the other to act as the access point
+# 	- the access point interface needs to support ap mode (`iw list | less /supported interface` or `grep -iA8 'supported interface'`)
 
 # TODO:
-# redo with less shell
-# - add more functions
+# - rewrite Popen calls without shell
 # - replace % with format() where possible
-# - macchanger!!!
+# - add function to check for required programs
+# - fix logging
+# - include some way to change mac addrees
+# - add ip/subnet setup functionality
+# - finish curses interface branch and merge
+# - fix bug where network interfaces sometimes stop working and need manual restart after program stops
+# - integrate with mimtools suite
+
+#---------------
 
 import io
 import os
@@ -20,14 +36,14 @@ path = '%s/.config' % os.path.expanduser('~')
 dlog = 'dnsmasq.log'
 hlog = 'hostapd.log'
 
-# default access point vars - redo with python regex
+# default access point vars - replace with curses branch regex version
 apdev = subprocess.Popen("cat %s/hostapd/rouge.conf | grep interface= | cut -d'=' -f2" % path,
 		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
 apsubnet = '10.0.0.0'
 apnetmask = '255.255.255.0'
 apip = '10.0.0.1/24'
 
-# ap settings - redo with python regex
+# ap settings - replace with curses branch regex version
 ssid = subprocess.Popen("cat %s/hostapd/rouge.conf | grep ssid= | cut -d'=' -f2" % path,
 		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
 chan = subprocess.Popen("cat %s/hostapd/rouge.conf | grep channel= | cut -d'=' -f2" % path,
@@ -37,25 +53,25 @@ enc = subprocess.Popen("cat %s/hostapd/rouge.conf | grep auth_algs= | cut -d'=' 
 password = subprocess.Popen("cat %s/hostapd/rouge.conf | grep channel= | cut -d'=' -f2" % path,
 		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
 
-# default internet device vars
+# default internet device vars - replace with curses branch regex version
 codev = 'wlp3s0'
 coip = subprocess.Popen("ip a | grep %s | awk 'FNR==2 {print $2}'" % codev, shell=True,
 		stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
 
-# all detected devices
+# all detected devices - replace with curses branch regex version
 devices = subprocess.Popen("ip a | grep \^\[0-9\] | awk '{print $2}' | cut -d':' -f1", shell=True,
 		stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip().split()
 
+#---------------
 
-
+# main menu
 def menu():
 	while True:
 		try:
 			print('[Menu splash here]')
 			print('0 - Exit')
 			print('1 - AP setup')
-			print('2 - IP setup')
-			print('3 - Start AP')
+			print('2 - Start AP')
 			selection = int(input('> '))
 
 			if selection == 0:
@@ -66,10 +82,6 @@ def menu():
 				break
 
 			elif selection == 2:
-				print('Coming soon')
-				break
-
-			elif selection == 3:
 				apstart()
 				break
 
@@ -90,8 +102,9 @@ def menu():
 			print('Exiting...')
 			sys.exit(1)
 
+#---------------
 
-
+# setup/chaange ap variables
 def varsetup():
 	try:
 		# globals
@@ -190,7 +203,7 @@ def varsetup():
 		# final confirm and commit
 		os.system('clear')
 		print('--Final settings--')
-		print('AP interface:		{}'.format(apdev))	# tab alignment???
+		print('AP interface:		{}'.format(apdev))
 		print('SSID:			{}'.format(ssid))
 		print('Channel:		{}'.format(chan))
 		print('Encryption mode:	{}'.format(modes[int(enc)]))
@@ -206,8 +219,9 @@ def varsetup():
 		print('Exiting...')
 		sys.exit(1)
 
+#---------------
 
-
+# commit changes from setup to file - replace with curses branch version
 def commit():
 	# make file changes here
 	thing = '{}/hostapd/rouge.conf'.format(path)
@@ -216,8 +230,9 @@ def commit():
 	apconf.close()
 	pass
 
+#---------------
 
-
+# start the ap
 def apstart():
 	try:
 		# Configure iface
@@ -247,11 +262,6 @@ def apstart():
 			subprocess.run('killall dnsmasq', shell=True)
 
 		# Start dsnmasq and hostapd
-#		dwriter = io.open(dlog, 'wb') 
-#		dreader = io.open(dlog, 'rb', 1)
-#		hwriter = io.open(hlog, 'wb') 
-#		hreader = io.open(hlog, 'rb', 1)
-
 		with io.open(dlog, 'wb') as dwriter, io.open(hlog, 'wb') as hwriter,\
 			io.open(dlog, 'rb', 1) as dreader, io.open(hlog, 'rb', 1) as hreader:
 			dnsmasq = subprocess.Popen('dnsmasq -d -C %s/dnsmasq/rouge.conf' % path, shell=True,
@@ -268,6 +278,12 @@ def apstart():
 
 				if hout:
 					print(hout)
+
+		# Log stuff
+#		dwriter = io.open(dlog, 'wb') 
+#		dreader = io.open(dlog, 'rb', 1)
+#		hwriter = io.open(hlog, 'wb') 
+#		hreader = io.open(hlog, 'rb', 1)
 
 #		while True:
 #			if hreader.read().decode():
@@ -300,7 +316,7 @@ def apstart():
 	os.remove(dlog)
 	sys.exit(code)
 
-
+#---------------
 
 if __name__ == '__main__':
 	os.system('clear')
@@ -309,5 +325,3 @@ if __name__ == '__main__':
 		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
 
 	menu()
-#	varsetup()
-#	apsetup()

@@ -6,8 +6,8 @@ from scapy.all import *
 
 def getargs():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('-t', '--target', dest='target', help='Target IP')
-	parser.add_argument('-g', '--gateway', dest='gateway', help='Gateway IP')
+	parser.add_argument('-t', '--target', dest='target', help='Target IP', nargs=1, required=True)
+	parser.add_argument('-g', '--gateway', dest='gateway', help='Gateway IP', nargs=1, required=True)
 	options = parser.parse_args()
 	return options
 
@@ -31,13 +31,14 @@ def restore(destip, destmac, srcip, srcmac):
 
 if __name__ == '__main__':
 	# get root
+	options = getargs()
+
 	if os.getuid() != 0:
 		print('This script needs root.')
 		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
 
 	subprocess.run('sysctl -w net.ipv4.ip_forward=1', shell=True, check=True)
 
-	options = getargs()
 	sentpacketcount = 0
 	try:
 		targmac = getmac(options.target)
