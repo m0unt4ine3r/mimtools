@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 # RougeAP - Software for a poor man's wifi pineapple
-# By Anthony Roebuck III
 
 # Requires:
 # - hostapd
