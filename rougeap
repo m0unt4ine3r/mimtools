@@ -3,7 +3,7 @@
 # TODO:
 # redo with less shell
 # - add more functions
-# - replace % with format() where possible
+# - use f'' or format
 # - macchanger!!!
 
 import io
@@ -15,16 +15,13 @@ import getopt
 import curses
 import subprocess
 
-# because colors are important
-curses.use_default_colors()
-
 # path to user configs
 # if statement?
 path = '%s/.config' % os.path.expanduser('~')
 #path = 'config'	# for testing git
 
 # get ap conf
-with open('{}/hostapd/rouge.conf'.format(path), 'r') as apconffile:
+with open(f'{path}/hostapd/rouge.conf', 'r') as apconffile:
 	apconf = apconffile.read()
 
 # dns conf
@@ -35,13 +32,13 @@ with open('{}/hostapd/rouge.conf'.format(path), 'r') as apconffile:
 dlog = 'dnsmasq.log'
 hlog = 'hostapd.log'
 
-# default access point vars - redo with python regex
+# default access point vars 
 apdev = re.search('interface=(.*)', apconf).group(1)
 apsubnet = '10.0.0.0'
 apnetmask = '255.255.255.0'
 apip = '10.0.0.1/24'
 
-# ap settings - redo with python regex
+# ap settings 
 ssid = re.search('ssid=(.*)', apconf).group(1)
 chan = re.search('channel=(.*)', apconf).group(1)
 enc = re.search('auth_algs=(.*)', apconf).group(1)
@@ -61,50 +58,61 @@ devices = subprocess.Popen("ip a | grep \^\[0-9\] | awk '{print $2}' | cut -d':'
 # Curses input prompt
 def cursin(stdscr, prompt):
 	arr = []
-	word = ''
+	output = ''
+	word = prompt	#rename?
 	pos = size = 0
+	start = x = len(prompt)
 
 	while True:
 		try:
-			stdscr.addstr(prompt)
 			stdscr.addstr(word)
-			stdscr.move(0, pos)
 			stdscr.refresh()
+			coords = stdscr.getyx()
+			stdscr.move(coords[0], x)
 			key = stdscr.getkey()
 
 			if key == '\n':
-				return word
+				return output
 
 			elif str(key) == 'KEY_BACKSPACE':
-				if pos > 0:
+				if x > start:
 					arr.pop(pos-1)
 					size -= 1
 					pos -= 1
+					x -= 1
 
 				else:
 					pass
 
 			elif str(key) == 'KEY_LEFT':
-				if pos > 0:
+				if x > start:
 					pos -= 1
+					x -= 1
 
 				else:
 					pass
 
 			elif str(key) == 'KEY_RIGHT':
-				if pos < size:
+				if x <= size+1:
 					pos += 1
+					x += 1
 
 				else:
 					pass
 
 			elif ord(key) >= 32 or ord(key) <= 126:
-				stdscr.clear()
 				arr.insert(pos, key)
 				size += 1
 				pos += 1
+				x += 1
 
-			word = ''.join(arr)
+			#else:
+			# catch up/down arrows and other invalid input
+
+			output = ''.join(arr)
+			word = prompt + output
+			stdscr.move(coords[0], 0)
+			stdscr.clrtoeol()
 
 		except TypeError:
 			pass
@@ -117,6 +125,9 @@ def cursin(stdscr, prompt):
 # ----------
 
 def menu(stdscr):
+	# because colors are important
+	curses.use_default_colors()
+
 	while True:
 		try:
 			stdscr.clear()
@@ -126,36 +137,36 @@ def menu(stdscr):
 			stdscr.addstr('2 - IP setup\n')
 			stdscr.addstr('3 - Start AP\n')
 			selection = int(cursin(stdscr, '> '))
-			#selection = int(input('> '))
 
 			if selection == 0:
 				sys.exit(0)
 
 			elif selection == 1:
-				os.system('clear')
-				#varsetup()
+				varsetup(stdscr)
 				break
 
 			elif selection == 2:
-				os.system('clear')
 				stdscr.addstr('Coming soon')
 				break
 
 			elif selection == 3:
-				os.system('clear')
-				#apstart()
+				apstart()
 				break
 
 			else:
-				os.system('clear')
+				stdscr.clear()
 				stdscr.addstr('Number out of range.')
+				stdscr.getch()
 
-#		except ValueError:
-#			os.system('clear')
-#			stdscr.addstr('Invalid input.')
+		except ValueError:
+			stdscr.clear()
+			stdscr.addstr('Invalid input.')
+			stdscr.getch()
 
 		except KeyboardInterrupt:
+			stdscr.clear()
 			stdscr.addstr('\nExiting...')
+			stdscr.getch()
 			sys.exit(0)
 
 #		except Exception as e:
@@ -165,7 +176,9 @@ def menu(stdscr):
 
 # ----------
 
-def varsetup():
+def varsetup(stdscr):
+	stdscr.clear()
+
 	try:
 		# globals
 		global apdev
@@ -179,103 +192,109 @@ def varsetup():
 			defap = apdev
 
 			while True:
-				stdscr.addstr('Detected devices:')
+				stdscr.clear()
+				stdscr.addstr('Detected devices:\n')
 				i = 0
 
 				for d in devices:
-					stdscr.addstr('{} - {}'.format(i, d))
+					stdscr.addstr(f'{i} - {d}\n')
 					i += 1
 
-				apselect = input('# of dev to be used as AP [{}]: '.format(defap))
+				apselect = cursin(stdscr, f'# of dev to be used as AP [{defap}]: ')
 				
 				try:
-					apselect = int(apselect)
+					if apselect:
+						apselect = int(apselect)
+					else:
+						apselect = 0
 
 				except ValueError:
-					os.system('clear')
+					stdscr.clear()
 					stdscr.addstr('Invalid input.')
+					stdscr.getch()
 					continue
 
-				if apselect and devices[apselect] != apdev:
-					if apselect in range(i):
-						os.system('clear')
+				if apselect in range(i):
+					if apselect and devices[apselect] != apdev:
+						stdscr.clear()
 						apdev = devices[apselect]
-						confirm = input('New AP dev is: {}\nIs this correct? [y/N]: '.format(apdev)).lower()
+						stdscr.addstr(f'New AP dev is: {apdev}\n')
+						confirm = cursin(stdscr, 'Is this correct? [y/N]: ').lower()
 
 						if confirm == 'y':
-							os.system('clear')
 							break
 
-					elif  apselect not in range(i):
-						os.system('clear')
-						stdscr.addstr('Not a valid selection.')
+					else:
+						stdscr.clear()
+						confirm = cursin(stdscr, f'Leave AP dev as default ({defap})? [y/N]: ').lower()
+
+						if confirm == 'y':
+							break
 
 				else:
-					os.system('clear')
-					confirm = input('Leave AP dev as default ({})? [y/N]: '.format(defap)).lower()
-
-					if confirm == 'y':
-						os.system('clear')
-						break
+					stdscr.clear()
+					stdscr.addstr('Not a valid selection.')
+					stdscr.getch()
 
 			# set ssid
 			defssid = ssid
 			while True:
-				ssidselect = input('Enter SSID [{}]: '.format(defssid))
+				stdscr.clear()
+				ssidselect = cursin(stdscr, f'Enter SSID [{defssid}]: ')
 
 				if ssidselect and ssidselect != ssid:
 					ssid = ssidselect
-					os.system('clear')
-					confirm = input('New SSID is: {}\nIs this correct? [y/N]: '.format(ssid)).lower()
+					stdscr.clear()
+					stdscr.addstr(f'New SSID is: {ssid}\n')
+					confirm = cursin(stdscr, 'Is this correct? [y/N]: ').lower()
 
 					if confirm == 'y':
-						os.system('clear')
+						stdscr.clear()
 						break
 
 				else:
-					#
-					# - maybe change to "Leave SSID as default (default)? [y/N]: "
-					#
-					os.system('clear')
-					confirm = input('Leave SSID as default ({})?'.format(defssid)).lower()
+					stdscr.clear()
+					confirm = cursin(stdscr, f'Leave SSID as default ({defssid})? [y/N]: ').lower()
 
 					if confirm == 'y':
-						os.system('clear')
+						stdscr.clear()
 						break
 
 			# set channel
 			defchan = chan
 			while True:
-				chanselect = input('Select a channel [{}]: '.format(defchan))
+				chanselect = cursin(stdscr, f'Select a channel (1-12) [{defchan}]: ')
 
 				if chanselect:
 					try:
 						chanselect = int(chanselect)
 
 					except ValueError:
-						os.system('clear')
+						stdscr.clear()
 						stdscr.addstr('Invalid input.')
 						continue
 
 					if chanselect in range(1, 12):
 						chan = chanselect
-						os.system('clear')
-						confirm = input('New channel is: {}\nIs this correct? [y/N]: '.format(chan)).lower()
+						stdscr.clear()
+						stdscr.addstr(f'New channel is: {chan}\n')
+						confirm = cursin('Is this correct? [y/N]: ').lower()
 
 						if confirm == 'y':
-							os.system('clear')
+							stdscr.clear()
 							break
 
 						else:
 							continue
 
 					else:
-						os.system('clear')
+						stdscr.clear()
 						stdscr.addstr('Invalid input. Valid channels (for US) are 1-12.')
+						stdscr.getch
 						continue
 
 				else:
-					os.system('clear')
+					stdscr.clear()
 					stdscr.addstr('Channel remains "{}".'.format(defchan))
 					break
 			
@@ -313,7 +332,7 @@ def varsetup():
 						break
 
 				#
-				# - ADD PASSWORD!!! and fix wiping/make tui
+				# - ADD PASSWORD!!! 
 				#
 
 				# final confirm and commit
@@ -334,12 +353,14 @@ def varsetup():
 
 	except KeyboardInterrupt:
 		stdscr.addstr('\nExiting...')
+		stdscr.getch()
 		sys.exit(0)
 
-	except Exception as e:
-		stdscr.addstr('\nError: {}'.format(e))
-		stdscr.addstr('Exiting...')
-		sys.exit(1)
+#	except Exception as e:
+#		stdscr.addstr(f'\nError: {e}\n')
+#		stdscr.addstr('Exiting...')
+#		stdscr.getch()
+#		sys.exit(1)
 
 # ----------
 
@@ -448,7 +469,6 @@ def apstart():
 # ----------
 
 if __name__ == '__main__':
-	os.system('clear')
 	if os.getuid() != 0:	# needs to be changed to only get root when needed and drop back to userland
 		print('This script needs root.')
 		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
