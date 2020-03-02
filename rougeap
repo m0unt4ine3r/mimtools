@@ -295,7 +295,7 @@ def varsetup(stdscr):
 
 				else:
 					stdscr.clear()
-					stdscr.addstr('Channel remains "{}".'.format(defchan))
+					stdscr.addstr(f'Channel remains "{defchan}".')
 					break
 			
 			# set encryption
@@ -307,28 +307,28 @@ def varsetup(stdscr):
 				stdscr.addstr('0 - open')
 				stdscr.addstr('1 - wpa2')
 				stdscr.addstr('2 - wep')
-				encselect = int(input('Select encryption type [{}]: '.format(defenc)))
+				encselect = int(cursin('Select encryption type [{defenc}]: '))
 
 				if encselect:
 					try:
-						encselect = int(encselect)
+						encselect = int(encselect)	# int needed?
 
 					except ValueError:
-						os.system('clear')
+						stdscr.clear()
 						stdscr.addstr('Invalid input.')
 						continue
 
 					if encselect in range(3):
 						enc = encselect
-						os.system('clear')
-						confirm = input('New encryption type is "{}". Is this correct? [y/N]: '.format(modes[enc])).lower()
+						stdscr.clear()
+						confirm = cursin(f'New encryption type is "{modes[enc]}". Is this correct? [y/N]: ').lower()
 
 						if confirm == 'y':
 							break
 
 					elif not encselect:
-						os.system('clear')
-						stdscr.addstr('Encrytption mode remains "{}".'.format(modes[enc]))
+						stdscr.clear()
+						stdscr.addstr(f'Encrytption mode remains "{modes[enc]}".')
 						break
 
 				#
@@ -336,13 +336,13 @@ def varsetup(stdscr):
 				#
 
 				# final confirm and commit
-				os.system('clear')
+				stdscr.clear()
 				stdscr.addstr('--Final settings--')
-				stdscr.addstr('AP interface:\t\t{}'.format(apdev))	# tab alignment???
-				stdscr.addstr('SSID:\t\t\t{}'.format(ssid))
-				stdscr.addstr('Channel:\t\t{}'.format(chan))
-				stdscr.addstr('Encryption mode:\t{}'.format(modes[int(enc)]))
-				finalselect = input('Are these settings correct? [y/N]: ').lower()
+				stdscr.addstr(f'AP interface:\t\t{apdev}')	# fix tab alignment
+				stdscr.addstr(f'SSID:\t\t\t{ssid}')
+				stdscr.addstr(f'Channel:\t\t{chan}')
+				stdscr.addstr(f'Encryption mode:\t{modes[int(enc)]}')
+				finalselect = cursin('Are these settings correct? [y/N]: ').lower()
 
 				if finalselect == 'y':
 					break
@@ -361,6 +361,7 @@ def varsetup(stdscr):
 #		stdscr.addstr('Exiting...')
 #		stdscr.getch()
 #		sys.exit(1)
+# - stopped here
 
 # ----------
 
