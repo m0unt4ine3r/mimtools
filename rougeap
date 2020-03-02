@@ -5,6 +5,7 @@
 # - add more functions
 # - use f'' or format
 # - macchanger!!!
+# - abstract confirmations/catch invalid input
 
 import io
 import os
@@ -143,15 +144,12 @@ def menu(stdscr):
 
 			elif selection == 1:
 				varsetup(stdscr)
-				break
 
 			elif selection == 2:
 				stdscr.addstr('Coming soon')
-				break
 
 			elif selection == 3:
-				apstart()
-				break
+				apstart(stdscr)
 
 			else:
 				stdscr.clear()
@@ -266,6 +264,7 @@ def varsetup(stdscr):
 				chanselect = cursin(stdscr, f'Select a channel (1-12) [{defchan}]: ')
 
 				if chanselect:
+					# can move up a level
 					try:
 						chanselect = int(chanselect)
 
@@ -278,7 +277,7 @@ def varsetup(stdscr):
 						chan = chanselect
 						stdscr.clear()
 						stdscr.addstr(f'New channel is: {chan}\n')
-						confirm = cursin('Is this correct? [y/N]: ').lower()
+						confirm = cursin(stdscr, 'Is this correct? [y/N]: ').lower()
 
 						if confirm == 'y':
 							stdscr.clear()
@@ -303,15 +302,16 @@ def varsetup(stdscr):
 			modes = ('open', 'wpa2', 'wep')
 
 			while True:
-				stdscr.addstr('Encryption modes:')
-				stdscr.addstr('0 - open')
-				stdscr.addstr('1 - wpa2')
-				stdscr.addstr('2 - wep')
-				encselect = int(cursin('Select encryption type [{defenc}]: '))
+				stdscr.addstr('Encryption modes:\n')
+				stdscr.addstr('0 - open\n')
+				stdscr.addstr('1 - wpa2\n')
+				stdscr.addstr('2 - wep\n')
+				encselect = cursin(stdscr, f'Select encryption type [{defenc}]: ')
 
 				if encselect:
+					# can move up a level
 					try:
-						encselect = int(encselect)	# int needed?
+						encselect = int(encselect)
 
 					except ValueError:
 						stdscr.clear()
@@ -321,31 +321,33 @@ def varsetup(stdscr):
 					if encselect in range(3):
 						enc = encselect
 						stdscr.clear()
-						confirm = cursin(f'New encryption type is "{modes[enc]}". Is this correct? [y/N]: ').lower()
+						confirm = cursin(stdscr, f'New encryption type is "{modes[enc]}". Is this correct? [y/N]: ').lower()
 
-						if confirm == 'y':
-							break
+						if confirm != 'y':
+							continue
 
 					elif not encselect:
 						stdscr.clear()
 						stdscr.addstr(f'Encrytption mode remains "{modes[enc]}".')
-						break
+						# add confirm here
 
 				#
-				# - ADD PASSWORD!!! 
+				# - ADD PASSWORD
 				#
 
+				# somewhat wonky - fix
 				# final confirm and commit
 				stdscr.clear()
-				stdscr.addstr('--Final settings--')
-				stdscr.addstr(f'AP interface:\t\t{apdev}')	# fix tab alignment
-				stdscr.addstr(f'SSID:\t\t\t{ssid}')
-				stdscr.addstr(f'Channel:\t\t{chan}')
-				stdscr.addstr(f'Encryption mode:\t{modes[int(enc)]}')
-				finalselect = cursin('Are these settings correct? [y/N]: ').lower()
+				stdscr.addstr('--Final settings--\n')
+				stdscr.addstr(f'AP interface:\t\t{apdev}\n')	# fix tab alignment
+				stdscr.addstr(f'SSID:\t\t\t{ssid}\n')
+				stdscr.addstr(f'Channel:\t\t{chan}\n')
+				stdscr.addstr(f'Encryption mode:\t{modes[int(enc)]}\n')
+				finalselect = cursin(stdscr, 'Are these settings correct? [y/N]: ').lower()
 
 				if finalselect == 'y':
 					break
+
 
 			stdscr.addstr('Commiting...')
 			commit()
@@ -356,12 +358,11 @@ def varsetup(stdscr):
 		stdscr.getch()
 		sys.exit(0)
 
-#	except Exception as e:
-#		stdscr.addstr(f'\nError: {e}\n')
-#		stdscr.addstr('Exiting...')
-#		stdscr.getch()
-#		sys.exit(1)
-# - stopped here
+	except Exception as e:
+		stdscr.addstr(f'\nError: {e}\n')
+		stdscr.addstr('Exiting...')
+		stdscr.getch()
+		sys.exit(1)
 
 # ----------
 
@@ -378,14 +379,15 @@ def commit():
 	apconf = re.sub('(channel=).*', '\g<1>{}'.format(chan), apconf)
 	apconf = re.sub('(auth_algs=).*', '\g<1>{}'.format(enc), apconf)
 
-	print(apconf)
+	#print(apconf)
 	
 	with open('{}/hostapd/rouge.conf'.format(path), 'w') as apconffile:
 		apconffile.write(apconf)
 
 # ----------
 
-def apstart():
+def apstart(stdscr):
+	code = 0
 	try:
 		# Configure iface
 		subprocess.run('ip link set %s down' % apdev, shell=True, check=True)
@@ -405,8 +407,8 @@ def apstart():
 					universal_newlines=True).communicate()[0].strip()
 
 		if dnsmasq:
-			print('dnsmasq already running. Kill it? [y/N]')
-			killit = input('> ').lower()
+			stdscr.addstr('dnsmasq already running. Kill it? [y/N]\n')
+			killit = cursin('> ').lower()
 		
 			if killit != 'y':
 				sys.exit('Exiting program')
@@ -414,10 +416,10 @@ def apstart():
 			subprocess.run('killall dnsmasq', shell=True)
 
 		# Start dsnmasq and hostapd
-#		dwriter = io.open(dlog, 'wb') 
-#		dreader = io.open(dlog, 'rb', 1)
-#		hwriter = io.open(hlog, 'wb') 
-#		hreader = io.open(hlog, 'rb', 1)
+		dwriter = io.open(dlog, 'wb') 
+		dreader = io.open(dlog, 'rb', 1)
+		hwriter = io.open(hlog, 'wb') 
+		hreader = io.open(hlog, 'rb', 1)
 
 		with io.open(dlog, 'wb') as dwriter, io.open(hlog, 'wb') as hwriter,\
 			io.open(dlog, 'rb', 1) as dreader, io.open(hlog, 'rb', 1) as hreader:
@@ -426,43 +428,43 @@ def apstart():
 			hostapd = subprocess.Popen('hostapd %s/hostapd/rouge.conf' % path, shell=True,
 						stdout=hwriter, universal_newlines=True)
 
+			# log output needs normalizing for curses
 			while dnsmasq.poll() is None and hostapd.poll() is None:
 				dout = dreader.read().decode()
 				hout = hreader.read().decode().strip()
 
 				if dout:
-					print(dout)
+					stdscr.addstr(dout)
 
 				if hout:
-					print(hout)
+					stdscr.addstr(hout)
 
-#		while True:
-#			if hreader.read().decode():
-#				print('From hostapd: ' + hreader.read().decode())
-#				#sys.stdout.write('From hostapd: ' + hreader.read().decode())
-#			if dreader.read().decode():
-#				print('dnsmasq')
-#				print('From dnsmasq: ' + dreader.read().decode())
-#				#sys.stdout.write('From dnsmasq: ' + dreader.read().decode())
+		while True:
+			if hreader.read().decode():
+				stdscr.addstr('From hostapd: ' + hreader.read().decode())
+			if dreader.read().decode():
+				stdscr.addstr('From dnsmasq: ' + dreader.read().decode())
 			
+
 	except KeyboardInterrupt:
 		code = 0
 		pass
 
 	except Exception as error:
 		code = 1
-		print('Error: {}.'.format(error))
+		stdscr.addstr('Error: {}.'.format(error))
 
 	# Tear everything down
-	print('Stopping hostapd...')
+	stdscr.getch()
+	stdscr.addstr('Stopping hostapd...\n')
 	hostapd.terminate()
-	print('Stopping dnsmask...')
+	stdscr.addstr('Stopping dnsmask...\n')
 	dnsmasq.terminate()
-	print('Stopping ip forwarding...')
+	stdscr.addstr('Stopping ip forwarding...\n')
 	subprocess.run('sysctl -w net.ipv4.ip_forward=0', shell=True, check=True)
-	print('Resetting iptables...')
+	stdscr.addstr('Resetting iptables...\n')
 	subprocess.run('iptreset', shell=True, check=True)
-	print('Removing log files...')
+	stdscr.addstr('Removing log files...')
 	os.remove(hlog)
 	os.remove(dlog)
 	sys.exit(code)
