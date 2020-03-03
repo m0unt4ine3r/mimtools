@@ -18,8 +18,8 @@ import subprocess
 
 # path to user configs
 # if statement?
-path = '%s/.config' % os.path.expanduser('~')
-#path = 'config'	# for testing git
+#path = '%s/.config' % os.path.expanduser('~')
+path = 'config'	# for git use
 
 # get ap conf
 with open(f'{path}/hostapd/rouge.conf', 'r') as apconffile:
@@ -42,6 +42,7 @@ apip = '10.0.0.1/24'
 # ap settings 
 ssid = re.search('ssid=(.*)', apconf).group(1)
 chan = re.search('channel=(.*)', apconf).group(1)
+wpa = re.search('wpa=(.*)', apconf).group(1)
 enc = re.search('auth_algs=(.*)', apconf).group(1)
 password = re.search('wpa_passphrase=(.*)', apconf).group(1)
 
@@ -182,6 +183,7 @@ def varsetup(stdscr):
 		global apdev
 		global ssid
 		global chan
+		global wpa
 		global enc
 		global password
 
@@ -298,6 +300,7 @@ def varsetup(stdscr):
 					break
 			
 			# set encryption
+			# needs to change both wpa and enc
 			defenc = enc
 			modes = ('open', 'wpa2', 'wep')
 
@@ -371,12 +374,15 @@ def commit():
 	global apdev
 	global ssid
 	global chan
+	global wpa
 	global enc
 
+	#change to not replace entire line?
 	# make file changes here
 	apconf = re.sub('(interface=).*', '\g<1>{}'.format(apdev), apconf)
 	apconf = re.sub('(ssid=).*', '\g<1>{}'.format(ssid), apconf)
 	apconf = re.sub('(channel=).*', '\g<1>{}'.format(chan), apconf)
+	apconf = re.sub('(wpa=).*', '\g<1>{}'.format(wpa), apconf)
 	apconf = re.sub('(auth_algs=).*', '\g<1>{}'.format(enc), apconf)
 
 	#print(apconf)
@@ -416,10 +422,10 @@ def apstart(stdscr):
 			subprocess.run('killall dnsmasq', shell=True)
 
 		# Start dsnmasq and hostapd
-		dwriter = io.open(dlog, 'wb') 
-		dreader = io.open(dlog, 'rb', 1)
-		hwriter = io.open(hlog, 'wb') 
-		hreader = io.open(hlog, 'rb', 1)
+#		dwriter = io.open(dlog, 'wb') 
+#		dreader = io.open(dlog, 'rb', 1)
+#		hwriter = io.open(hlog, 'wb') 
+#		hreader = io.open(hlog, 'rb', 1)
 
 		with io.open(dlog, 'wb') as dwriter, io.open(hlog, 'wb') as hwriter,\
 			io.open(dlog, 'rb', 1) as dreader, io.open(hlog, 'rb', 1) as hreader:
@@ -439,11 +445,11 @@ def apstart(stdscr):
 				if hout:
 					stdscr.addstr(hout)
 
-		while True:
-			if hreader.read().decode():
-				stdscr.addstr('From hostapd: ' + hreader.read().decode())
-			if dreader.read().decode():
-				stdscr.addstr('From dnsmasq: ' + dreader.read().decode())
+#		while True:
+#			if hreader.read().decode():
+#				stdscr.addstr('From hostapd: ' + hreader.read().decode())
+#			if dreader.read().decode():
+#				stdscr.addstr('From dnsmasq: ' + dreader.read().decode())
 			
 
 	except KeyboardInterrupt:
@@ -455,7 +461,6 @@ def apstart(stdscr):
 		stdscr.addstr('Error: {}.'.format(error))
 
 	# Tear everything down
-	stdscr.getch()
 	stdscr.addstr('Stopping hostapd...\n')
 	hostapd.terminate()
 	stdscr.addstr('Stopping dnsmask...\n')
@@ -467,6 +472,7 @@ def apstart(stdscr):
 	stdscr.addstr('Removing log files...')
 	os.remove(hlog)
 	os.remove(dlog)
+	stdscr.getch()
 	sys.exit(code)
 
 # ----------
