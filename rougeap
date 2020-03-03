@@ -9,13 +9,14 @@
 # 	- the access point interface needs to support ap mode (`iw list | less /supported interface` or `grep -iA8 'supported interface'`)
 
 # TODO:
-# - rewrite Popen calls without shell
-# - replace % with format() where possible
+# redo with less shell
+# - add more functions
+# - use f'' instead of format/%
+# - macchanger!!!
+# - abstract confirmations/catch invalid input
 # - add function to check for required programs
 # - fix logging
-# - include some way to change mac addrees
 # - add ip/subnet setup functionality
-# - finish curses interface branch and merge
 # - fix bug where network interfaces sometimes stop working and need manual restart after program stops
 # - integrate with mimtools suite
 
@@ -23,34 +24,42 @@
 
 import io
 import os
+import re
 import sys
 import time
 import getopt
+import curses
 import subprocess
 
 # path to user configs
-path = '%s/.config' % os.path.expanduser('~')
+# if statement?
+#path = '%s/.config' % os.path.expanduser('~')
+path = 'config'	# for git use
+
+# get ap conf
+with open(f'{path}/hostapd/rouge.conf', 'r') as apconffile:
+	apconf = apconffile.read()
+
+# dns conf
+#with open('{}/dnsmasq/rouge.conf'.format(path), 'r') as dnsconffile:
+#	dnsconf = dnsconffile.read()
 
 # log files
 dlog = 'dnsmasq.log'
 hlog = 'hostapd.log'
 
-# default access point vars - replace with curses branch regex version
-apdev = subprocess.Popen("cat %s/hostapd/rouge.conf | grep interface= | cut -d'=' -f2" % path,
-		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+# default access point vars 
+apdev = re.search('interface=(.*)', apconf).group(1)
 apsubnet = '10.0.0.0'
 apnetmask = '255.255.255.0'
 apip = '10.0.0.1/24'
 
-# ap settings - replace with curses branch regex version
-ssid = subprocess.Popen("cat %s/hostapd/rouge.conf | grep ssid= | cut -d'=' -f2" % path,
-		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
-chan = subprocess.Popen("cat %s/hostapd/rouge.conf | grep channel= | cut -d'=' -f2" % path,
-		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
-enc = subprocess.Popen("cat %s/hostapd/rouge.conf | grep auth_algs= | cut -d'=' -f2" % path,
-		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
-password = subprocess.Popen("cat %s/hostapd/rouge.conf | grep channel= | cut -d'=' -f2" % path,
-		shell=True, stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip()
+# ap settings 
+ssid = re.search('ssid=(.*)', apconf).group(1)
+chan = re.search('channel=(.*)', apconf).group(1)
+wpa = re.search('wpa=(.*)', apconf).group(1)
+enc = re.search('auth_algs=(.*)', apconf).group(1)
+password = re.search('wpa_passphrase=(.*)', apconf).group(1)
 
 # default internet device vars - replace with curses branch regex version
 codev = 'wlp3s0'
@@ -61,178 +70,345 @@ coip = subprocess.Popen("ip a | grep %s | awk 'FNR==2 {print $2}'" % codev, shel
 devices = subprocess.Popen("ip a | grep \^\[0-9\] | awk '{print $2}' | cut -d':' -f1", shell=True,
 		stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].strip().split()
 
-#---------------
+# ----------
 
-# main menu
-def menu():
+# Curses input prompt
+def cursin(stdscr, prompt):
+	arr = []
+	output = ''
+	word = prompt	#rename?
+	pos = size = 0
+	start = x = len(prompt)
+
 	while True:
 		try:
-			print('[Menu splash here]')
-			print('0 - Exit')
-			print('1 - AP setup')
-			print('2 - Start AP')
-			selection = int(input('> '))
+			stdscr.addstr(word)
+			stdscr.refresh()
+			coords = stdscr.getyx()
+			stdscr.move(coords[0], x)
+			key = stdscr.getkey()
+
+			if key == '\n':
+				return output
+
+			elif str(key) == 'KEY_BACKSPACE':
+				if x > start:
+					arr.pop(pos-1)
+					size -= 1
+					pos -= 1
+					x -= 1
+
+				else:
+					pass
+
+			elif str(key) == 'KEY_LEFT':
+				if x > start:
+					pos -= 1
+					x -= 1
+
+				else:
+					pass
+
+			elif str(key) == 'KEY_RIGHT':
+				if x <= size+1:
+					pos += 1
+					x += 1
+
+				else:
+					pass
+
+			elif ord(key) >= 32 or ord(key) <= 126:
+				arr.insert(pos, key)
+				size += 1
+				pos += 1
+				x += 1
+
+			#else:
+			# catch up/down arrows and other invalid input
+
+			output = ''.join(arr)
+			word = prompt + output
+			stdscr.move(coords[0], 0)
+			stdscr.clrtoeol()
+
+		except TypeError:
+			pass
+
+		except KeyboardInterrupt:
+			curses.endwin()
+			print('Exiting...')
+			break
+
+# ----------
+
+def menu(stdscr):
+	# because colors are important
+	curses.use_default_colors()
+
+	while True:
+		try:
+			stdscr.clear()
+			stdscr.addstr('[Menu splash here]\n')
+			stdscr.addstr('0 - Exit\n')
+			stdscr.addstr('1 - AP setup\n')
+			stdscr.addstr('2 - IP setup\n')
+			stdscr.addstr('3 - Start AP\n')
+			selection = int(cursin(stdscr, '> '))
 
 			if selection == 0:
 				sys.exit(0)
 
 			elif selection == 1:
-				varsetup()
-				break
+				varsetup(stdscr)
 
 			elif selection == 2:
-				apstart()
-				break
+				stdscr.addstr('Coming soon')
+
+			elif selection == 3:
+				apstart(stdscr)
 
 			else:
-				os.system('clear')
-				print('Number out of range.')
+				stdscr.clear()
+				stdscr.addstr('Number out of range.')
+				stdscr.getch()
 
 		except ValueError:
-			os.system('clear')
-			print('Invalid input.')
+			stdscr.clear()
+			stdscr.addstr('Invalid input.')
+			stdscr.getch()
 
 		except KeyboardInterrupt:
-			print('\nExiting...')
+			stdscr.clear()
+			stdscr.addstr('\nExiting...')
+			stdscr.getch()
 			sys.exit(0)
 
-		except Exception as e:
-			print('\nError: {}'.format(e))
-			print('Exiting...')
-			sys.exit(1)
+#		except Exception as e:
+#			stdscr.addstr('\nError: {}'.format(e))
+#			stdscr.addstr('Exiting...')
+#			sys.exit(1)
 
-#---------------
+# ----------
 
-# setup/chaange ap variables
-def varsetup():
+def varsetup(stdscr):
+	stdscr.clear()
+
 	try:
 		# globals
 		global apdev
 		global ssid
 		global chan
+		global wpa
 		global enc
 		global password
 
-		# set device to be used as ap
-		defap = apdev
-
 		while True:
-			os.system('clear')
-			print('Detected devices:')
-			i = 0
+			# set device to be used as ap
+			defap = apdev
 
-			for d in devices:
-				print('{} - {}'.format(i, d))
-				i += 1
+			while True:
+				stdscr.clear()
+				stdscr.addstr('Detected devices:\n')
+				i = 0
 
-			apselect = input('# of dev to be used as AP [{}]: '.format(defap))
+				for d in devices:
+					stdscr.addstr(f'{i} - {d}\n')
+					i += 1
 
-			if apselect and int(apselect) in range(i):
-				apdev = devices[int(apselect)]
-				print('AP dev is now {}.'.format(apdev))
-				break
+				apselect = cursin(stdscr, f'# of dev to be used as AP [{defap}]: ')
+				
+				try:
+					if apselect:
+						apselect = int(apselect)
+					else:
+						apselect = 0
 
-			elif apselect and int(apselect) not in range(i):
-				print('Not a valid selection.')
-
-			elif not apselect:
-				print('AP dev remains {}.'.format(defap))
-				break
-
-		# set ssid
-		defssid = ssid
-		while True:
-			os.system('clear')
-			ssidselect = input('Enter SSID [{}]: '.format(defssid))
-
-			if ssidselect:
-				ssid = ssidselect
-				confirm = input('New SSID is {}. Is this correct? [y/N]: '.format(ssid)).lower()
-
-				if confirm == 'y':
-					break
-
-			elif not ssidselect:
-				print('SSID remains {}.'.format(defssid))
-				break
-
-		# set channel
-		defchan = chan
-		while True:
-			os.system('clear')
-			chanselect = input('Select a channel [{}]: '.format(defchan))
-
-			if chanselect in range(1, 12):
-				chan = chanselect
-				confirm = input('New channel is {}. Is this correct? [y/N]: '.format(channel)).lower()
-
-				if confirm == 'y':
-					break
-
-				else:
+				except ValueError:
+					stdscr.clear()
+					stdscr.addstr('Invalid input.')
+					stdscr.getch()
 					continue
 
-			elif not chanselect:
-				print('Channel remains {}.'.format(defchan))
-				break
-		
-		# set encryption
-		defenc = enc
-		modes = ('open', 'wpa2', 'wep')
+				if apselect in range(i):
+					if apselect and devices[apselect] != apdev:
+						stdscr.clear()
+						apdev = devices[apselect]
+						stdscr.addstr(f'New AP dev is: {apdev}\n')
+						confirm = cursin(stdscr, 'Is this correct? [y/N]: ').lower()
 
-		while True:
-			os.system('clear')
-			print('Encryption modes:')
-			print('0 - open')
-			print('1 - wpa2')
-			print('2 - wep')
-			encselect = input('Select encryption type [{}]: '.format(defenc))
+						if confirm == 'y':
+							break
 
-			if encselect in range(3):
-				enc = encselect
-				confirm = input('New channel is {}. Is this correct? [y/N]: '.format(channel)).lower()
+					else:
+						stdscr.clear()
+						confirm = cursin(stdscr, f'Leave AP dev as default ({defap})? [y/N]: ').lower()
 
-				if confirm == 'y':
+						if confirm == 'y':
+							break
+
+				else:
+					stdscr.clear()
+					stdscr.addstr('Not a valid selection.')
+					stdscr.getch()
+
+			# set ssid
+			defssid = ssid
+			while True:
+				stdscr.clear()
+				ssidselect = cursin(stdscr, f'Enter SSID [{defssid}]: ')
+
+				if ssidselect and ssidselect != ssid:
+					ssid = ssidselect
+					stdscr.clear()
+					stdscr.addstr(f'New SSID is: {ssid}\n')
+					confirm = cursin(stdscr, 'Is this correct? [y/N]: ').lower()
+
+					if confirm == 'y':
+						stdscr.clear()
+						break
+
+				else:
+					stdscr.clear()
+					confirm = cursin(stdscr, f'Leave SSID as default ({defssid})? [y/N]: ').lower()
+
+					if confirm == 'y':
+						stdscr.clear()
+						break
+
+			# set channel
+			defchan = chan
+			while True:
+				chanselect = cursin(stdscr, f'Select a channel (1-12) [{defchan}]: ')
+
+				if chanselect:
+					# can move up a level
+					try:
+						chanselect = int(chanselect)
+
+					except ValueError:
+						stdscr.clear()
+						stdscr.addstr('Invalid input.')
+						continue
+
+					if chanselect in range(1, 12):
+						chan = chanselect
+						stdscr.clear()
+						stdscr.addstr(f'New channel is: {chan}\n')
+						confirm = cursin(stdscr, 'Is this correct? [y/N]: ').lower()
+
+						if confirm == 'y':
+							stdscr.clear()
+							break
+
+						else:
+							continue
+
+					else:
+						stdscr.clear()
+						stdscr.addstr('Invalid input. Valid channels (for US) are 1-12.')
+						stdscr.getch
+						continue
+
+				else:
+					stdscr.clear()
+					stdscr.addstr(f'Channel remains "{defchan}".')
+					break
+			
+			# set encryption
+			# needs to change both wpa and enc
+			defenc = enc
+			modes = ('open', 'wpa2', 'wep')
+
+			while True:
+				stdscr.addstr('Encryption modes:\n')
+				stdscr.addstr('0 - open\n')
+				stdscr.addstr('1 - wpa2\n')
+				stdscr.addstr('2 - wep\n')
+				encselect = cursin(stdscr, f'Select encryption type [{defenc}]: ')
+
+				if encselect:
+					# can move up a level
+					try:
+						encselect = int(encselect)
+
+					except ValueError:
+						stdscr.clear()
+						stdscr.addstr('Invalid input.')
+						continue
+
+					if encselect in range(3):
+						enc = encselect
+						stdscr.clear()
+						confirm = cursin(stdscr, f'New encryption type is "{modes[enc]}". Is this correct? [y/N]: ').lower()
+
+						if confirm != 'y':
+							continue
+
+					elif not encselect:
+						stdscr.clear()
+						stdscr.addstr(f'Encrytption mode remains "{modes[enc]}".')
+						# add confirm here
+
+				#
+				# - ADD PASSWORD
+				#
+
+				# somewhat wonky - fix
+				# final confirm and commit
+				stdscr.clear()
+				stdscr.addstr('--Final settings--\n')
+				stdscr.addstr(f'AP interface:\t\t{apdev}\n')	# fix tab alignment
+				stdscr.addstr(f'SSID:\t\t\t{ssid}\n')
+				stdscr.addstr(f'Channel:\t\t{chan}\n')
+				stdscr.addstr(f'Encryption mode:\t{modes[int(enc)]}\n')
+				finalselect = cursin(stdscr, 'Are these settings correct? [y/N]: ').lower()
+
+				if finalselect == 'y':
 					break
 
-			elif not encselect:
-				print('Encrytption mode remains {}.'.format(modes[int(enc)]))
-				break
 
-		# final confirm and commit
-		os.system('clear')
-		print('--Final settings--')
-		print('AP interface:		{}'.format(apdev))
-		print('SSID:			{}'.format(ssid))
-		print('Channel:		{}'.format(chan))
-		print('Encryption mode:	{}'.format(modes[int(enc)]))
-		print('Commiting...')
-		commit()
-		
+			stdscr.addstr('Commiting...')
+			commit()
+			break
+
 	except KeyboardInterrupt:
-		print('\nExiting...')
+		stdscr.addstr('\nExiting...')
+		stdscr.getch()
 		sys.exit(0)
 
 	except Exception as e:
-		print('\nError: {}'.format(e))
-		print('Exiting...')
+		stdscr.addstr(f'\nError: {e}\n')
+		stdscr.addstr('Exiting...')
+		stdscr.getch()
 		sys.exit(1)
 
-#---------------
+# ----------
 
-# commit changes from setup to file - replace with curses branch version
 def commit():
+	global apconf
+	global apdev
+	global ssid
+	global chan
+	global wpa
+	global enc
+
+	#change to not replace entire line?
 	# make file changes here
-	thing = '{}/hostapd/rouge.conf'.format(path)
-	apconf = open('{}'.format(thing), 'rb')
-	print(apconf.read())
-	apconf.close()
-	pass
+	apconf = re.sub('(interface=).*', '\g<1>{}'.format(apdev), apconf)
+	apconf = re.sub('(ssid=).*', '\g<1>{}'.format(ssid), apconf)
+	apconf = re.sub('(channel=).*', '\g<1>{}'.format(chan), apconf)
+	apconf = re.sub('(wpa=).*', '\g<1>{}'.format(wpa), apconf)
+	apconf = re.sub('(auth_algs=).*', '\g<1>{}'.format(enc), apconf)
 
-#---------------
+	#print(apconf)
+	
+	with open('{}/hostapd/rouge.conf'.format(path), 'w') as apconffile:
+		apconffile.write(apconf)
 
-# start the ap
-def apstart():
+# ----------
+
+def apstart(stdscr):
+	code = 0
 	try:
 		# Configure iface
 		subprocess.run('ip link set %s down' % apdev, shell=True, check=True)
@@ -252,8 +428,8 @@ def apstart():
 					universal_newlines=True).communicate()[0].strip()
 
 		if dnsmasq:
-			print('dnsmasq already running. Kill it? [y/N]')
-			killit = input('> ').lower()
+			stdscr.addstr('dnsmasq already running. Kill it? [y/N]\n')
+			killit = cursin('> ').lower()
 		
 			if killit != 'y':
 				sys.exit('Exiting program')
@@ -268,15 +444,16 @@ def apstart():
 			hostapd = subprocess.Popen('hostapd %s/hostapd/rouge.conf' % path, shell=True,
 						stdout=hwriter, universal_newlines=True)
 
+			# log output needs normalizing for curses
 			while dnsmasq.poll() is None and hostapd.poll() is None:
 				dout = dreader.read().decode()
 				hout = hreader.read().decode().strip()
 
 				if dout:
-					print(dout)
+					stdscr.addstr(dout)
 
 				if hout:
-					print(hout)
+					stdscr.addstr(hout)
 
 		# Log stuff
 #		dwriter = io.open(dlog, 'wb') 
@@ -286,41 +463,41 @@ def apstart():
 
 #		while True:
 #			if hreader.read().decode():
-#				print('From hostapd: ' + hreader.read().decode())
-#				#sys.stdout.write('From hostapd: ' + hreader.read().decode())
+#				stdscr.addstr('From hostapd: ' + hreader.read().decode())
 #			if dreader.read().decode():
-#				print('dnsmasq')
-#				print('From dnsmasq: ' + dreader.read().decode())
-#				#sys.stdout.write('From dnsmasq: ' + dreader.read().decode())
+#				stdscr.addstr('From dnsmasq: ' + dreader.read().decode())
 			
+
 	except KeyboardInterrupt:
 		code = 0
 		pass
 
 	except Exception as error:
 		code = 1
-		print('Error: {}.'.format(error))
+		stdscr.addstr('Error: {}.'.format(error))
 
 	# Tear everything down
-	print('Stopping hostapd...')
+	stdscr.addstr('Stopping hostapd...\n')
 	hostapd.terminate()
-	print('Stopping dnsmask...')
+	stdscr.addstr('Stopping dnsmask...\n')
 	dnsmasq.terminate()
-	print('Stopping ip forwarding...')
+	stdscr.addstr('Stopping ip forwarding...\n')
 	subprocess.run('sysctl -w net.ipv4.ip_forward=0', shell=True, check=True)
-	print('Resetting iptables...')
+	stdscr.addstr('Resetting iptables...\n')
 	subprocess.run('iptreset', shell=True, check=True)
-	print('Removing log files...')
+	stdscr.addstr('Removing log files...')
 	os.remove(hlog)
 	os.remove(dlog)
+	stdscr.getch()
 	sys.exit(code)
 
-#---------------
+# ----------
 
 if __name__ == '__main__':
-	os.system('clear')
-	if os.getuid() != 0:
+	if os.getuid() != 0:	# needs to be changed to only get root when needed and drop back to userland
 		print('This script needs root.')
 		os.execvp('sudo', ['sudo', '-E'] + sys.argv)
 
-	menu()
+	curses.wrapper(menu)
+#	varsetup()
+#	apsetup()
